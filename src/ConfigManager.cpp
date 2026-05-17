@@ -146,6 +146,10 @@ int ConfigManager::mavlink_gps_rate_hz = 10;        // HIL_GPS
 int ConfigManager::mavlink_state_rate_hz = 50;      // HIL_STATE_QUATERNION
 int ConfigManager::mavlink_rc_rate_hz = 50;         // HIL_RC_INPUTS
 
+// Connection target defaults
+std::string ConfigManager::sitl_ip   = "0.0.0.0";  // All interfaces
+int         ConfigManager::sitl_port = 4560;
+
 
 /**
  * @brief Loads and parses the configuration from the 'config.ini' file.
@@ -253,6 +257,23 @@ void ConfigManager::loadConfiguration() {
     if (mavlink_rc_rate_hz < 1 || mavlink_rc_rate_hz > 200) {
         XPLMDebugString("px4xplane: [WARNING] Invalid RC rate, using default 50 Hz\n");
         mavlink_rc_rate_hz = 50;
+    }
+
+    // Load connection configuration
+    sitl_ip   = ini.GetValue("", "sitl_ip",   "0.0.0.0");
+    sitl_port = (int)ini.GetLongValue("", "sitl_port", 4560);
+
+    if (sitl_port < 1 || sitl_port > 65535) {
+        XPLMDebugString("px4xplane: [WARNING] Invalid sitl_port, using default 4560\n");
+        sitl_port = 4560;
+    }
+
+    {
+        char connBuf[128];
+        snprintf(connBuf, sizeof(connBuf),
+            "px4xplane: Connection - listen on %s:%d\n",
+            sitl_ip.c_str(), sitl_port);
+        XPLMDebugString(connBuf);
     }
 
     if (debug_verbose_logging) {

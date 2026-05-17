@@ -143,6 +143,10 @@ public:
     static int mavlink_state_rate_hz;        // HIL_STATE_QUATERNION rate
     static int mavlink_rc_rate_hz;           // HIL_RC_INPUTS rate
 
+    // Connection target configuration
+    static std::string sitl_ip;   // Bind address for server socket ("0.0.0.0" = all interfaces, "127.0.0.1" = loopback only)
+    static int         sitl_port; // TCP port X-Plane listens on for PX4 connections
+
 private:
     static std::vector<int> parseMotorIndices(const std::string& indicesStr);
 

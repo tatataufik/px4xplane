@@ -86,15 +86,31 @@ void ConnectionManager::setupServerSocket() {
 
     sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(sitlPort);
+
+    const std::string& bindIp = ConfigManager::sitl_ip;
+    if (bindIp.empty() || bindIp == "0.0.0.0") {
+        serv_addr.sin_addr.s_addr = INADDR_ANY;
+    } else {
+        if (inet_pton(AF_INET, bindIp.c_str(), &serv_addr.sin_addr) != 1) {
+            XPLMDebugString(("px4xplane: Invalid sitl_ip '" + bindIp + "', falling back to 0.0.0.0\n").c_str());
+            serv_addr.sin_addr.s_addr = INADDR_ANY;
+        }
+    }
+
+    const int bindPort = ConfigManager::sitl_port;
+    serv_addr.sin_port = htons(static_cast<uint16_t>(bindPort));
 
     if (bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        XPLMDebugString("px4xplane: Error on binding port 4560.\n");
+        char errMsg[128];
+        snprintf(errMsg, sizeof(errMsg),
+            "px4xplane: Error on binding %s:%d.\n", bindIp.c_str(), bindPort);
+        XPLMDebugString(errMsg);
 
-        // UX FIX: Notify user of error instead of silent failure
         status = "Bind Error";
-        setLastMessage("Failed to bind port 4560. Port may be in use by another program.");
+        char userMsg[128];
+        snprintf(userMsg, sizeof(userMsg),
+            "Failed to bind %s:%d. Port may be in use.", bindIp.c_str(), bindPort);
+        setLastMessage(userMsg);
         XPLMSpeakString("Port bind failed");
 
         closeSocket(sockfd);
@@ -129,9 +145,17 @@ void ConnectionManager::setupServerSocket() {
 
     // UX FIX (January 2025): Update status for user visibility
     status = "Waiting for PX4 SITL...";
-    setLastMessage("Server socket ready on port 4560. Start PX4 SITL to connect.");
-
-    XPLMDebugString("px4xplane: Server socket ready on port 4560, waiting for PX4 SITL to connect...\n");
+    {
+        char readyMsg[160];
+        snprintf(readyMsg, sizeof(readyMsg),
+            "Server socket ready on %s:%d. Start PX4 SITL to connect.",
+            ConfigManager::sitl_ip.c_str(), ConfigManager::sitl_port);
+        setLastMessage(readyMsg);
+        snprintf(readyMsg, sizeof(readyMsg),
+            "px4xplane: Server socket ready on %s:%d, waiting for PX4 SITL to connect...\n",
+            ConfigManager::sitl_ip.c_str(), ConfigManager::sitl_port);
+        XPLMDebugString(readyMsg);
+    }
     XPLMSpeakString("Waiting for PX4 connection");  // Audio feedback
 
     // NOTE: Don't call acceptConnection() here anymore - poll in flight loop instead
