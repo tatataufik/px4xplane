@@ -376,6 +376,10 @@ param set-default CBRK_IO_SAFETY 22027   # Disable safety switch
 # Left V-tail deflection = (pitch_cmd × 0.5) + (yaw_cmd × -0.5)
 # Right V-tail deflection = (pitch_cmd × 0.5) + (yaw_cmd × 0.5)
 #
+# RC input mode: accept RC_CHANNELS_OVERRIDE from MAVLink (joystick/GCS) as RC source
+# 0=RC transmitter only  1=Joystick/MAVLink RC_CHANNELS_OVERRIDE  3=No input required
+param set-default COM_RC_IN_MODE 1
+
 ################################################################################
 # END OF CONFIGURATION
 ################################################################################

@@ -339,6 +339,10 @@ param set-default CBRK_IO_SAFETY 22027   # Disable safety switch
 #   - Verify FW_LND_AIRSPD = 36.0 (above 25 m/s stall)
 #   - Check FW_AIRSPD_MIN = 30.0
 #
+# RC input mode: accept RC_CHANNELS_OVERRIDE from MAVLink (joystick/GCS) as RC source
+# 0=RC transmitter only  1=Joystick/MAVLink RC_CHANNELS_OVERRIDE  3=No input required
+param set-default COM_RC_IN_MODE 1
+
 ################################################################################
 # END OF CONFIGURATION
 ################################################################################

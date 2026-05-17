@@ -919,16 +919,19 @@ uint16_t MAVLinkManager::mapRCChannel(float value, float min, float max) {
  * @param buffer Pointer to the received data buffer.
  * @param size Size of the received data buffer.
  */
-void MAVLinkManager::receiveHILActuatorControls(uint8_t* buffer, int size) {
-	if (!ConnectionManager::isConnected()) return;
+int MAVLinkManager::receiveHILActuatorControls(uint8_t* buffer, int size, int max_frames) {
+	if (!ConnectionManager::isConnected()) return 0;
 
 	mavlink_message_t msg;
 	mavlink_status_t status;
-	for (int i = 0; i < size; ++i) {
+	int frames = 0;
+	for (int i = 0; i < size && frames < max_frames; ++i) {
 		if (mavlink_parse_char(MAVLINK_COMM_0, buffer[i], &msg, &status)) {
 			handleReceivedMessage(msg);
+			++frames;
 		}
 	}
+	return frames;
 }
 
 /**
@@ -945,9 +948,7 @@ void MAVLinkManager::handleReceivedMessage(const mavlink_message_t& msg) {
 	case MAVLINK_MSG_ID_HIL_ACTUATOR_CONTROLS:
 		processHILActuatorControlsMessage(msg);
 		break;
-		// Handle other MAVLink message types if needed
 	default:
-		// Handle unrecognized message types if needed
 		break;
 	}
 }

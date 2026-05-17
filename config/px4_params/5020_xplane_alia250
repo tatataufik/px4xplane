@@ -590,6 +590,10 @@ param set-default MC_BAT_SCALE_EN 0
 # Keep a short change log when tuning this file. Back each change with a
 # repeatable run, ULog estimator evidence, or an XPlaneTruthCapture replay diff.
 #
+# RC input mode: accept RC_CHANNELS_OVERRIDE from MAVLink (joystick/GCS) as RC source
+# 0=RC transmitter only  1=Joystick/MAVLink RC_CHANNELS_OVERRIDE  3=No input required
+param set-default COM_RC_IN_MODE 1
+
 ################################################################################
 # END OF CONFIGURATION
 ################################################################################

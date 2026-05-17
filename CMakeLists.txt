@@ -149,6 +149,7 @@ if(WIN32)
         _WINDOWS
         _USRDLL
         IBM=1
+        MAVLINK_COMM_NUM_BUFFERS=1
         XPLM200=1
         XPLM210=1
         XPLM300=1
@@ -187,6 +188,7 @@ elseif(APPLE)
     # macOS (Clang)
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         APL=1
+        MAVLINK_COMM_NUM_BUFFERS=1
         XPLM200=1
         XPLM210=1
         XPLM300=1
@@ -215,6 +217,7 @@ elseif(UNIX)
     # Linux (GCC/Clang)
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         LIN=1
+        MAVLINK_COMM_NUM_BUFFERS=1
         XPLM200=1
         XPLM210=1
         XPLM300=1
@@ -234,9 +237,13 @@ elseif(UNIX)
     )
 
     # Linux-specific linker flags
-    # Note: -Wl,--allow-shlib-undefined allows undefined symbols (resolved by X-Plane at runtime)
+    # XPLM/XPWidgets symbols are NOT linked at compile time — X-Plane exports them at runtime.
+    # --unresolved-symbols=ignore-all allows the undefined XPLM references to be resolved by
+    # X-Plane's process when dlopen() loads the plugin (same pattern as macOS dynamic_lookup).
+    # -Wl,-rpath, clears the embedded RUNPATH so the SDK stub .so is never loaded from the
+    # build tree, preventing transitive libfmod dependencies from breaking plugin loading.
     set_target_properties(${PROJECT_NAME} PROPERTIES
-        LINK_FLAGS "-rdynamic -nodefaultlibs -Wl,--allow-shlib-undefined"
+        LINK_FLAGS "-rdynamic -nodefaultlibs -Wl,--unresolved-symbols=ignore-all -Wl,-rpath,"
     )
 endif()
 
@@ -262,10 +269,11 @@ elseif(APPLE)
     )
 
 elseif(UNIX)
-    # Linux shared libraries
+    # Linux: do NOT link against XPLM_64.so / XPWidgets_64.so.
+    # Those symbols are provided by X-Plane's own process via RTLD_GLOBAL at plugin load time.
+    # Linking against the SDK stubs embeds a libfmod.so.13 transitive dependency that breaks
+    # loading in X-Plane 11 (which ships libfmod.so.8).
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${SDK_LIB_DIR}/XPLM_64.so
-        ${SDK_LIB_DIR}/XPWidgets_64.so
         GL
     )
 endif()
@@ -315,7 +323,10 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 )
 
 # Copy PX4 parameter files to px4_airframes subdirectory
-file(GLOB PX4_PARAMS "${CMAKE_SOURCE_DIR}/config/px4_params/*")
+# CONFIGURE_DEPENDS: CMake re-globs at build time and reconfigures if the
+# directory contents change, so newly added airframe files are picked up
+# without a manual cmake re-run.
+file(GLOB PX4_PARAMS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/config/px4_params/*")
 foreach(PARAM_FILE ${PX4_PARAMS})
     get_filename_component(PARAM_NAME ${PARAM_FILE} NAME)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

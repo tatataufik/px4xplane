@@ -18,7 +18,7 @@ public:
     static void setGyroData(mavlink_hil_sensor_t& hil_sensor);
     static void setPressureData(mavlink_hil_sensor_t& hil_sensor, uint8_t sensor_id = 0);
     static void setMagneticFieldData(mavlink_hil_sensor_t& hil_sensor);
-    static void receiveHILActuatorControls(uint8_t* buffer, int size);
+    static int  receiveHILActuatorControls(uint8_t* buffer, int size, int max_frames);
     static bool hasFreshHILActuatorControls(uint64_t timeout_usec);
     static uint64_t getHILActuatorControlsAgeUsec();
     static Eigen::Vector3f computeAcceleration();

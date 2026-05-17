@@ -10,8 +10,8 @@
 #include <fcntl.h>      // For fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h> // For TCP_NODELAY
 #include <arpa/inet.h>
-
 #endif
 #include "XPLMUtilities.h"
 #include <cstring>
@@ -33,6 +33,7 @@ static bool connected = false;
 std::map<int, int> ConnectionManager::motorMappings;
 int ConnectionManager::sockfd = -1;
 int ConnectionManager::newsockfd = -1;
+bool ConnectionManager::s_ppp_connection = false;
 
 int ConnectionManager::sitlPort = 4560;
 std::string ConnectionManager::status = "Disconnected";
@@ -208,6 +209,66 @@ void ConnectionManager::tryAcceptConnection() {
         return;
     }
 
+    // Set accepted socket non-blocking so sendData() never stalls the flight loop
+    // (server socket sockfd is already non-blocking; accepted socket must be set separately)
+#if IBM
+    u_long nbMode = 1;
+    ioctlsocket(newsockfd, FIONBIO, &nbMode);
+#elif LIN || APL
+    {
+        int fl = fcntl(newsockfd, F_GETFL, 0);
+        fcntl(newsockfd, F_SETFL, fl | O_NONBLOCK);
+    }
+#endif
+
+    // Disable Nagle's algorithm so each MAVLink message is sent as its own TCP segment.
+    // Required for PPP/fmu-v3 HIL mode: NuttX USART3 RX buffer is 1024 bytes at 115200 baud.
+    // Without TCP_NODELAY, Nagle can batch consecutive HIL messages into one segment that
+    // exceeds the NuttX TCP receive window, stalling delivery and causing QGC command-ack losses.
+    {
+        int noDelay = 1;
+#if IBM
+        setsockopt(newsockfd, IPPROTO_TCP, TCP_NODELAY,
+                   reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
+#elif LIN || APL
+        setsockopt(newsockfd, IPPROTO_TCP, TCP_NODELAY, &noDelay, sizeof(noDelay));
+#endif
+    }
+
+    // Detect whether the peer is on the PPP tunnel (10.0.x.x) or a direct connection.
+    // PPP link runs at 115200 baud over a physical UART — keep conservative buffers.
+    // Direct connections (same-host SITL or LAN) support full throughput — maximize buffers.
+    {
+        char peer_ip[INET_ADDRSTRLEN] = {};
+        inet_ntop(AF_INET, &cli_addr.sin_addr, peer_ip, sizeof(peer_ip));
+        s_ppp_connection = (strncmp(peer_ip, "10.0.", 5) == 0);
+
+        char logBuf[128];
+        if (s_ppp_connection) {
+            snprintf(logBuf, sizeof(logBuf),
+                "px4xplane: PPP peer %s — conservative socket buffers\n", peer_ip);
+        } else {
+            // Non-PPP: set large kernel send/receive buffers so the OS never stalls
+            // the flight loop waiting for the TCP stack to drain a slow link.
+            // SO_SNDBUF 4 MB: absorbs a full-rate burst of HIL sensor frames.
+            // SO_RCVBUF 2 MB: ensures actuator messages are never dropped on the receive side.
+            int sndbuf = 4 * 1024 * 1024;
+            int rcvbuf = 2 * 1024 * 1024;
+#if IBM
+            setsockopt(newsockfd, SOL_SOCKET, SO_SNDBUF,
+                       reinterpret_cast<const char*>(&sndbuf), sizeof(sndbuf));
+            setsockopt(newsockfd, SOL_SOCKET, SO_RCVBUF,
+                       reinterpret_cast<const char*>(&rcvbuf), sizeof(rcvbuf));
+#elif LIN || APL
+            setsockopt(newsockfd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+            setsockopt(newsockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+#endif
+            snprintf(logBuf, sizeof(logBuf),
+                "px4xplane: direct peer %s — SO_SNDBUF 4MB SO_RCVBUF 2MB\n", peer_ip);
+        }
+        XPLMDebugString(logBuf);
+    }
+
     // Successfully connected!
     XPLMDebugString("px4xplane: PX4 SITL connected successfully!\n");
     connected = true;
@@ -355,33 +416,32 @@ void ConnectionManager::closeSocket(int& sockfd) {
 void ConnectionManager::sendData(const uint8_t* buffer, int len) {
     if (!connected) return;
 
-    // Log the MAVLink packet in an interpretable format
-    //std::string logMessage = "Sending MAVLink packet: ";
-    /*for (int i = 0; i < len; i++) {
-        logMessage += std::to_string(buffer[i]) + " ";
-    }*/
-    //XPLMDebugString(logMessage.c_str());
-
     int totalBytesSent = 0;
     while (totalBytesSent < len) {
         int bytesSent = send(newsockfd, reinterpret_cast<const char*>(buffer) + totalBytesSent, len - totalBytesSent, 0);
 
         if (bytesSent < 0) {
-            char buf[256];
 #if IBM
-            snprintf(buf, sizeof(buf), "px4xplane: Error sending data: %d\n", WSAGetLastError());
+            int err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK) {
+                // TCP send buffer full (PX4 busy with QGC param download etc.) — drop this frame
+                return;
+            }
+            char buf[256];
+            snprintf(buf, sizeof(buf), "px4xplane: Error sending data: %d\n", err);
 #elif LIN || APL
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // TCP send buffer full (PX4 busy with QGC param download etc.) — drop this frame
+                return;
+            }
+            char buf[256];
             snprintf(buf, sizeof(buf), "px4xplane: Error sending data: %s\n", strerror(errno));
 #endif
             XPLMDebugString(buf);
-            // Optionally, handle error, e.g., clean up and/or reconnect
             return;
         }
         else if (bytesSent == 0) {
-            // The peer has closed the connection.
             XPLMDebugString("px4xplane: Peer has closed the connection\n");
-
-            // Clean up and/or try to reconnect.
             return;
         }
 
@@ -390,15 +450,28 @@ void ConnectionManager::sendData(const uint8_t* buffer, int len) {
 }
 
 
+bool ConnectionManager::isPppConnection()
+{
+    return s_ppp_connection;
+}
+
 void ConnectionManager::receiveData() {
     if (!connected) return;
 
-    constexpr int MAX_RECV_PASSES_PER_FRAME = 16;
-    constexpr int RECV_BUFFER_SIZE = 512;
-    uint8_t buffer[RECV_BUFFER_SIZE];
+    // PPP (10.0.x.x): 115200 baud → ~192 bytes/frame at 60 Hz — small budget.
+    // Non-PPP: restore original budget (16 passes × 512 B) unchanged from
+    // before PPP detection was added; SO_SNDBUF/SO_RCVBUF are still maximised
+    // at accept() time (see tryAcceptConnection).
+    const int max_passes    = s_ppp_connection ? 4   : 16;
+    const int recv_buf_size = s_ppp_connection ? 256 : 512;
+    uint8_t buffer[512];
 
+    // Total MAVLink frames parsed this flight-loop frame, shared across all recv passes.
+    // Both the recv loop (max_passes) and the MAVLink parser (max_frames) honour the
+    // same budget so PPP gets ≤4 frames and non-PPP gets ≤16 frames end-to-end.
+    int frames_parsed = 0;
     int passes = 0;
-    for (; passes < MAX_RECV_PASSES_PER_FRAME; ++passes) {
+    for (; passes < max_passes && frames_parsed < max_passes; ++passes) {
         // Set up the read set and timeout for select
         fd_set readSet;
         FD_ZERO(&readSet);
@@ -417,7 +490,7 @@ void ConnectionManager::receiveData() {
             break;
         }
 
-        int bytesReceived = recv(newsockfd, reinterpret_cast<char*>(buffer), sizeof(buffer), 0);
+        int bytesReceived = recv(newsockfd, reinterpret_cast<char*>(buffer), recv_buf_size, 0);
         if (bytesReceived < 0) {
             XPLMDebugString("px4xplane: Error receiving data\n");
             setLastMessage("Error receiving from PX4!"); // Store the received message
@@ -430,16 +503,13 @@ void ConnectionManager::receiveData() {
         }
         else if (bytesReceived > 0) {
             setLastMessage("Receiving from PX4!"); // Store the received message
-            //XPLMDebugString("px4xplane: Data received: ");
-            //XPLMDebugString(reinterpret_cast<char*>(buffer)); // Write the received message to the X-Plane log
-
-            // Call MAVLinkManager::receiveHILActuatorControls() function here
-            MAVLinkManager::receiveHILActuatorControls(buffer, bytesReceived);
+            frames_parsed += MAVLinkManager::receiveHILActuatorControls(
+                buffer, bytesReceived, max_passes - frames_parsed);
         }
     }
 
-    if (passes == MAX_RECV_PASSES_PER_FRAME && ConfigManager::debug_verbose_logging) {
-        XPLMDebugString("px4xplane: MAVLink receive budget exhausted; remaining data will be processed next frame\n");
+    if (frames_parsed >= max_passes && ConfigManager::debug_verbose_logging) {
+        XPLMDebugString("px4xplane: MAVLink frame budget exhausted; remaining data will be processed next frame\n");
     }
 }
 

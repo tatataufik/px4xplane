@@ -929,11 +929,10 @@ float DataRefManager::applyFilteringIfNeeded(float raw_value,
 void DataRefManager::checkAndApplyPropBrakes() {
 	XPLMDataRef throttleDataRef = XPLMFindDataRef("sim/flightmodel/engine/ENGN_thro_use");
 	if (throttleDataRef != nullptr) {
-		float throttleValues[8]; // Assuming a maximum of 8 motors
+		float throttleValues[8];
 		XPLMGetDatavf(throttleDataRef, throttleValues, 0, 8);
 
 		for (int i = 0; i < 8; ++i) {
-			// Check if the motor has a brake feature and needs a brake applied or removed
 			if (ConfigManager::hasPropBrake(i)) {
 				bool shouldBrake = throttleValues[i] == 0.0f;
 				bool isBraking = motorBrakeStates.test(i);

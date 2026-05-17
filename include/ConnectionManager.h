@@ -21,11 +21,14 @@ public:
     static std::map<int, int> motorMappings;
     static std::map<int, int> loadMotorMappings(const std::string& filename);
 
+    static bool isPppConnection();
+
 private:
     static int sockfd; // Socket file descriptor
     static int newsockfd; // Declaration of newsockfd
     static std::string status;
     static int sitlPort;
     static std::string lastMessage; // Variable to keep the last message
+    static bool s_ppp_connection;   // true when peer IP is 10.0.x.x (PPP tunnel)
 
 };
