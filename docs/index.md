@@ -2,6 +2,10 @@
 
 This index is the stable entry point for user and developer documentation.
 
+## Architecture
+
+- [Architecture & Data Flow](architecture.md) — System overview, MAVLink flow, plugin internals, startup sequence
+
 ## User Guides
 
 - [Build](BUILD.md)
