@@ -52,9 +52,9 @@
 #                     /     \
 #                    2       3
 #
-# Motor 0: Front-Right (CCW) - Position: (+1.4, -1.4, 0)m from CG
-# Motor 1: Front-Left  (CW)  - Position: (+1.4, +1.4, 0)m from CG
-# Motor 2: Rear-Left   (CCW) - Position: (-1.4, -1.4, 0)m from CG
+# Motor 0: Front-Right (CCW) - Position: (+1.4, +1.4, 0)m from CG  (PX4: Y+ = right)
+# Motor 1: Rear-Left   (CCW) - Position: (-1.4, -1.4, 0)m from CG
+# Motor 2: Front-Left  (CW)  - Position: (+1.4, -1.4, 0)m from CG
 # Motor 3: Rear-Right  (CW)  - Position: (-1.4, +1.4, 0)m from CG
 #
 # CT=6.5: Thrust coefficient tuned for large rotors
@@ -67,20 +67,20 @@ param set-default CA_FAILURE_MODE 0
 
 # Motor 0: Front-Right (CCW)
 param set-default CA_ROTOR0_PX 1.4
-param set-default CA_ROTOR0_PY -1.4
+param set-default CA_ROTOR0_PY 1.4
 param set-default CA_ROTOR0_AZ -1
 param set-default CA_ROTOR0_CT 6.5
 param set-default CA_ROTOR0_KM -0.05
 
-# Motor 1: Front-Left (CW)
-param set-default CA_ROTOR1_PX 1.4
-param set-default CA_ROTOR1_PY 1.4
+# Motor 1: Rear-Left (CCW)
+param set-default CA_ROTOR1_PX -1.4
+param set-default CA_ROTOR1_PY -1.4
 param set-default CA_ROTOR1_AZ -1
 param set-default CA_ROTOR1_CT 6.5
-param set-default CA_ROTOR1_KM 0.05
+param set-default CA_ROTOR1_KM -0.05
 
-# Motor 2: Rear-Left (CCW)
-param set-default CA_ROTOR2_PX -1.4
+# Motor 2: Front-Left (CW)
+param set-default CA_ROTOR2_PX 1.4
 param set-default CA_ROTOR2_PY -1.4
 param set-default CA_ROTOR2_AZ -1
 param set-default CA_ROTOR2_CT 6.5
@@ -91,7 +91,7 @@ param set-default CA_ROTOR3_PX -1.4
 param set-default CA_ROTOR3_PY 1.4
 param set-default CA_ROTOR3_AZ -1
 param set-default CA_ROTOR3_CT 6.5
-param set-default CA_ROTOR3_KM -0.05
+param set-default CA_ROTOR3_KM 0.05
 
 # PWM Output Mapping
 param set-default PWM_MAIN_FUNC1 101
@@ -147,8 +147,8 @@ param set-default EKF2_BARO_CTRL 1
 param set-default EKF2_MULTI_IMU 1
 
 # Accelerometer bias estimation (v3.3.3 - X-Plane SITL optimized)
-param set-default EKF2_ABIAS_INIT 0.2     # Tighter initial bias estimate
-param set-default EKF2_ABL_LIM 2.5        # X-Plane SITL requires higher tolerance (see note below)
+param set-default EKF2_ABIAS_INIT 0.3     # Tighter initial bias estimate
+param set-default EKF2_ABL_LIM 3.5        # X-Plane SITL requires higher tolerance (see note below)
 param set-default EKF2_ABL_TAU 0.5        # Slower bias adaptation (stability)
 param set-default EKF2_ABL_ACCLIM 35.0
 param set-default EKF2_ACC_NOISE 1.0      # Better accelerometer trust
@@ -164,7 +164,7 @@ param set-default EKF2_GYR_NOISE 0.015    # Gyro measurement noise (rad/s)
 param set-default EKF2_GYR_B_NOISE 0.001  # Gyro bias process noise (rad/s)
 
 # Barometer parameters (v3.2.0 - CRITICAL)
-param set-default EKF2_BARO_NOISE 0.003   # 3mm - matches plugin sensor noise
+param set-default EKF2_BARO_NOISE 0.005   # 5mm - slightly relaxed for X-Plane SITL startup
 param set-default EKF2_BARO_DELAY 0.0
 param set-default EKF2_BARO_GATE 10.0     # Increased for FPS variability tolerance
 
@@ -187,7 +187,7 @@ param set-default EKF2_ASP_DELAY 0.0
 param set-default EKF2_AVEL_DELAY 0.0
 param set-default EKF2_TAS_GATE 5.0
 param set-default EKF2_WIND_NSD 0.01
-param set-default EKF2_REQ_VDRIFT 1.0
+param set-default EKF2_REQ_VDRIFT 2.0
 
 # IMU configuration
 param set-default IMU_GYRO_RATEMAX 100
@@ -264,24 +264,24 @@ param set-default MPC_XY_P 0.05           # Horizontal position P (conservative)
 param set-default MPC_Z_P 0.25            # Vertical position P
 
 # Velocity control
-param set-default MPC_XY_VEL_P_ACC 1.2
-param set-default MPC_XY_VEL_I_ACC 0.2
-param set-default MPC_XY_VEL_D_ACC 1.5
-param set-default MPC_Z_VEL_P_ACC 3
-param set-default MPC_Z_VEL_I_ACC 2
+param set-default MPC_XY_VEL_P_ACC 0.45
+param set-default MPC_XY_VEL_I_ACC 0.12
+param set-default MPC_XY_VEL_D_ACC 1.1
+param set-default MPC_Z_VEL_P_ACC 2.5
+param set-default MPC_Z_VEL_I_ACC 1.7
 param set-default MPC_Z_VEL_D_ACC 0.2
 
 # Velocity limits (passenger comfort priority)
-param set-default MPC_XY_VEL_MAX 12       # Max horizontal (m/s) ~43 km/h
+param set-default MPC_XY_VEL_MAX 23       # Max horizontal (m/s) ~83 km/h
 param set-default MPC_Z_VEL_MAX_UP 3      # Max ascent (m/s) - smooth climb
 param set-default MPC_Z_VEL_MAX_DN 1.5    # Max descent (m/s) - gentle
-param set-default MPC_VEL_MANUAL 10
-param set-default MPC_XY_CRUISE 8         # Cruise speed ~29 km/h (passenger comfort)
+param set-default MPC_VEL_MANUAL 22
+param set-default MPC_XY_CRUISE 22        # Cruise speed ~80 km/h
 
 # Trajectory & jerk limits (reduced for smooth ride)
 param set-default MPC_XY_TRAJ_P 0.5
-param set-default MPC_JERK_AUTO 0.8       # Auto jerk limit (reduced for comfort)
-param set-default MPC_JERK_MAX 2.5        # Max jerk (reduced for comfort)
+param set-default MPC_JERK_AUTO 3.0       # High-speed flight
+param set-default MPC_JERK_MAX 6.0
 
 # Error limits
 param set-default MPC_XY_ERR_MAX 2
@@ -294,7 +294,7 @@ param set-default MPC_XY_ERR_MAX 2
 
 # Tilt & attitude limits
 param set-default MPC_MAN_TILT_MAX 35
-param set-default MPC_TILTMAX_AIR 45
+param set-default MPC_TILTMAX_AIR 55
 param set-default MPC_TILTMAX_LND 12
 
 # Throttle settings
@@ -412,7 +412,6 @@ param set-default RTL_LAND_DELAY 0
 # Collision prevention
 param set-default CP_DELAY 0.4
 param set-default CP_DIST -1              # Disabled
-param set-default CP_GO_NO_DATA 0
 param set-default CP_GUIDE_ANG 30
 
 # Follow target
